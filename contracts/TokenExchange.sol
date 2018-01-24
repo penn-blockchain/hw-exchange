@@ -42,10 +42,8 @@ contract TokenExchange {
   //@param _amount The number of _tokens being sold
   //@param _costPerToken The cost, in Wei, per token being sold
   function sellTokens(address _token, uint _amount, uint _costPerToken) public {
-    if (users[msg.sender].tokenBalance[_token] >= _amount)
-    {
-      users[msg.sender].sellOrders[_token] = SellOrder({numTokens : _amount, pricePerToken: _costPerToken});
-    }
+    require(users[msg.sender].tokenBalance[_token] >= _amount);
+    users[msg.sender].sellOrders[_token] = SellOrder({numTokens : _amount, pricePerToken: _costPerToken});
   }
 
 
@@ -53,32 +51,35 @@ contract TokenExchange {
   //@param _seller Address of user to buy the tokens from
   //@param _token Address of token to buy
   //@param _amount The number of tokens to purchase.
-  function buyToken(address _seller, address _token, uint _amount) public payable {
-    if (users[_seller].sellOrders[_token].numTokens >= _amount && users[msg.sender].etherBalance >= (_amount * users[_seller].sellOrders[_token].pricePerToken))
-    {
-      users[_seller].tokenBalance[_token] -= _amount;
-      users[_seller].sellOrders[_token].numTokens -= _amount;
-      users[_seller].etherBalance += _amount * users[_seller].sellOrders[_token].pricePerToken;
-      users[msg.sender].etherBalance -= _amount * users[_seller].sellOrders[_token].pricePerToken;
-      users[msg.sender].tokenBalance[_token] += _amount;
-    }
+  function buyTokens(address _seller, address _token, uint _amount) public payable {
+    require(users[_seller].sellOrders[_token].numTokens >= _amount);
+    require(msg.value >= _amount * users[_seller].sellOrders[_token].pricePerToken);
+
+    users[_seller].tokenBalance[_token] -= _amount;
+    users[_seller].sellOrders[_token].numTokens -= _amount;
+    users[_seller].etherBalance += _amount * users[_seller].sellOrders[_token].pricePerToken;
+
+    msg.sender.transfer(msg.value - _amount * users[_seller].sellOrders[_token].pricePerToken);
+
+    users[msg.sender].tokenBalance[_token] += _amount;
   }
 
   //@dev Allows anyone to withdraw tokens this exchange holds on their behalf
 	//@param _token Address of token being withdrawn
 	//@param _amount Amount of tokens being withdrawn
   function withdrawToken(address _token, uint _amount) public {
-    if (users[msg.sender].tokenBalance[_token] >= _amount)
-    {
-      users[msg.sender].tokenBalance[_token] -= _amount;
-      users[msg.sender].sellOrders[_token] = SellOrder({numTokens : 0, pricePerToken: 0});
-      ERCToken(_token).transferFrom(this, msg.sender, _amount);
-    }
+    require(users[msg.sender].tokenBalance[_token] >= _amount);
+
+    users[msg.sender].tokenBalance[_token] -= _amount;
+    delete users[msg.sender].sellOrders[_token];
+
+    ERCToken(_token).transfer(msg.sender, _amount);
   }
 
   //@dev Allows anyone to withdraw any Ether held by this exchange on their behalf
   function withdrawEther() public {
-      msg.sender.transfer(users[msg.sender].etherBalance);
+    msg.sender.transfer(users[msg.sender].etherBalance);
+    users[msg.sender].etherBalance = 0;
   }
 
 
@@ -90,17 +91,15 @@ contract TokenExchange {
 	//@param _owner Address of user to check balance of.
 	//@param _token Address of token to check balance of _owner for.
 	//@return Returns amount of _token held by the exchange on behalf of the _owner.
-  function getTokenBalance(address _owner, address _token) public returns (uint balance) {
+  function getTokenBalance(address _owner, address _token) public view returns (uint balance) {
       return users[_owner].tokenBalance[_token];
   }
 
   //Allows anyone to check the ether balance of someone on this exchange.
 	//@param _owner Address of user to check balance of.
 	//@return Returns amount of ether held by this exchange on behalf of the user
-  function getEtherBalance(address _owner) public returns (uint balance) {
-
+  function getEtherBalance(address _owner) public view returns (uint balance) {
       return users[_owner].etherBalance;
-
   }
 
 }
